@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const url = require('url');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
@@ -16,12 +17,13 @@ function createWindow() {
     },
   });
 
-  const startUrl = `file://${path.join(__dirname, 'frontend', 'index.html')}`;
-  mainWindow.loadURL(startUrl);
-
-  mainWindow.on('closed', function () {
-    mainWindow = null;
+  const startUrl = url.format({
+    pathname: path.join(__dirname, 'build', 'index.html'),
+    protocol: 'file:',
+    slashes: true,
   });
+  mainWindow.loadURL(startUrl);  
+  
 }
 
 app.whenReady().then(createWindow);

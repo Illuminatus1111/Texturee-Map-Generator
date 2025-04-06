@@ -1,99 +1,74 @@
 import sys
-import json
 import os
-from PIL import Image, ImageEnhance, ImageOps, ImageFilter
+import json
+from PIL import Image, ImageEnhance, ImageFilter
 import numpy as np
 
-def generate_normal_map(image, strength=2.0):
-    gray = image.convert('L')
-    gray_np = np.array(gray, dtype='float32')
-    dx = np.gradient(gray_np, axis=1)
-    dy = np.gradient(gray_np, axis=0)
-    dz = np.ones_like(dx) * (255.0 / strength)
+def generate_map(image, map_type, strength=1.0):
+    image = image.convert('RGB')
+    arr = np.array(image).astype(np.float32) / 255.0
 
-    normal = np.stack((dx, dy, dz), axis=-1)
-    normal = (normal - normal.min()) / (normal.max() - normal.min()) * 255.0
-    normal_img = Image.fromarray(normal.astype('uint8'))
-    return normal_img
+    if map_type == 'normal':
+        gray = image.convert('L').filter(ImageFilter.FIND_EDGES)
+        return ImageEnhance.Contrast(gray).enhance(strength)
 
-def generate_bump_map(image, strength=1.5):
-    enhancer = ImageEnhance.Contrast(image.convert('L'))
-    bump = enhancer.enhance(strength)
-    return bump
+    elif map_type == 'bump':
+        gray = image.convert('L')
+        return ImageEnhance.Contrast(gray).enhance(strength)
 
-def generate_metallic_map(image, strength=1.0):
-    inverted = ImageOps.invert(image.convert('L'))
-    metallic = ImageEnhance.Brightness(inverted).enhance(strength)
-    return metallic
+    elif map_type == 'metallic':
+        channel = Image.fromarray((arr[:, :, 0] * 255).astype('uint8'))
+        return ImageEnhance.Contrast(channel).enhance(strength)
 
-def generate_occlusion_map(image, strength=1.0):
-    blurred = image.convert('L').filter(ImageFilter.GaussianBlur(radius=2))
-    occlusion = ImageEnhance.Contrast(blurred).enhance(strength)
-    return occlusion
+    elif map_type == 'occlusion':
+        gray = image.convert('L')
+        return ImageEnhance.Brightness(gray).enhance(1 / (strength + 0.01))
 
-def generate_roughness_map(image, strength=1.0):
-    gray = image.convert('L')
-    roughness = ImageOps.autocontrast(gray.filter(ImageFilter.EDGE_ENHANCE))
-    roughness = ImageEnhance.Sharpness(roughness).enhance(strength)
-    return roughness
+    elif map_type == 'roughness':
+        inverted = ImageOps.invert(image.convert('L'))
+        return ImageEnhance.Contrast(inverted).enhance(strength)
 
-def generate_emission_map(image, strength=2.0):
-    gray = image.convert('L')
-    bright = ImageEnhance.Brightness(gray).enhance(strength)
-    emission = ImageOps.colorize(bright, black="black", white="cyan")
-    return emission
+    elif map_type == 'height':
+        edges = image.convert('L').filter(ImageFilter.CONTOUR)
+        return ImageEnhance.Contrast(edges).enhance(strength)
 
-def save_output(img, name, output_dir):
-    output_path = os.path.join(output_dir, f"{name}.png")
-    img.save(output_path)
-    return output_path
+    elif map_type == 'specular':
+        enhancer = ImageEnhance.Brightness(image.convert('L'))
+        return enhancer.enhance(strength)
+
+    elif map_type == 'emissive':
+        arr *= strength
+        arr[arr > 1] = 1
+        return Image.fromarray((arr * 255).astype('uint8'))
+
+    else:
+        raise ValueError(f"Unsupported map type: {map_type}")
 
 def main():
-    if len(sys.argv) < 4:
-        print(json.dumps({"error": "Invalid arguments"}))
-        sys.exit(1)
-
     image_path = sys.argv[1]
     selected_maps = json.loads(sys.argv[2])
     settings = json.loads(sys.argv[3])
-
-    image = Image.open(image_path).convert("RGB")
-    output_dir = os.path.join(os.path.dirname(image_path), "generated_maps")
+    
+    image = Image.open(image_path)
+    basename = os.path.splitext(os.path.basename(image_path))[0]
+    output_dir = os.path.join(os.path.dirname(image_path), f"{basename}_maps")
     os.makedirs(output_dir, exist_ok=True)
 
-    result_paths = {}
+    result = {}
 
-    if selected_maps.get("normal"):
-        strength = settings.get("normal_strength", 2.0)
-        normal_map = generate_normal_map(image, strength)
-        result_paths["normal"] = save_output(normal_map, "normal_map", output_dir)
+    for map_type, selected in selected_maps.items():
+        if selected:
+            strength = float(settings.get(map_type, 1.0))
+            try:
+                map_img = generate_map(image, map_type, strength)
+                filename = f"{basename}_{map_type}.png"
+                filepath = os.path.join(output_dir, filename)
+                map_img.save(filepath)
+                result[map_type] = filepath
+            except Exception as e:
+                result[map_type] = f"Error: {str(e)}"
 
-    if selected_maps.get("bump"):
-        strength = settings.get("bump_strength", 1.5)
-        bump_map = generate_bump_map(image, strength)
-        result_paths["bump"] = save_output(bump_map, "bump_map", output_dir)
-
-    if selected_maps.get("metallic"):
-        strength = settings.get("metallic_strength", 1.0)
-        metallic_map = generate_metallic_map(image, strength)
-        result_paths["metallic"] = save_output(metallic_map, "metallic_map", output_dir)
-
-    if selected_maps.get("occlusion"):
-        strength = settings.get("occlusion_strength", 1.0)
-        occlusion_map = generate_occlusion_map(image, strength)
-        result_paths["occlusion"] = save_output(occlusion_map, "occlusion_map", output_dir)
-
-    if selected_maps.get("roughness"):
-        strength = settings.get("roughness_strength", 1.0)
-        roughness_map = generate_roughness_map(image, strength)
-        result_paths["roughness"] = save_output(roughness_map, "roughness_map", output_dir)
-
-    if selected_maps.get("emission"):
-        strength = settings.get("emission_strength", 2.0)
-        emission_map = generate_emission_map(image, strength)
-        result_paths["emission"] = save_output(emission_map, "emission_map", output_dir)
-
-    print(json.dumps({"success": True, "outputs": result_paths}))
+    print(json.dumps(result))
 
 if __name__ == "__main__":
     main()
