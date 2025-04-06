@@ -1,0 +1,34 @@
+# Node modules
+node_modules/
+
+# Build output
+build/
+dist/
+*.log
+
+# Electron packaging
+*.asar
+*.exe
+
+# Python cache and venvs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+
+# React dev files
+frontend/build/
+frontend/node_modules/
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*

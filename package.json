@@ -1,0 +1,16 @@
+{
+  "name": "mapapp",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+  "start": "electron .",
+  "pack": "electron-packager . mapapp --platform=win32 --arch=x64 --out=dist --overwrite --asar --prune=true"
+},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "electron": "^35.1.4"
+  }
+}
